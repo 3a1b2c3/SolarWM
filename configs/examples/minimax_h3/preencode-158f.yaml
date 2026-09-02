@@ -1,0 +1,57 @@
+# Raw WDS -> official H3 Qwen/VisualVAE/AudioVAE artifacts.
+schema: solarwm.run.v1
+action: preencode
+name: minimax-h3-preencode-158f
+
+model:
+  family: minimax_h3
+  architecture: minimax-h3-33b
+  checkpoint_path: /path/to/models/MiniMax-H3
+  codec_identity: official-minimax-h3-codec
+  torch_dtype: bfloat16
+  camera_attention_mode: fused_prope
+  attention_head_dim: 128
+  camera_prope_head_dim_start: 96
+  camera_prope_head_dim_end: 128
+  camera_translation_transform: logd4
+  camera_intrinsics_mode: wan_fixed
+  latent_channels: 24
+  latent_height: 48
+  latent_width: 84
+  rows_per_latent: 1008
+  num_frames_per_block: 5
+  max_prior_clean_chunks: 5
+
+data:
+  input_mode: raw
+  format: webdataset
+  transport:
+    kind: local
+    root: /path/to/SolarWM-Data/releases-v1
+  index_root: /path/to/SolarWM-Data/releases-v1
+  index: recipes/clean-957f/raw-wds/train-index.jsonl.gz
+  pixel_frames: 158
+  encoded_latents: 47
+  train_target_latents: 47
+  height: 768
+  width: 1344
+  latent_channels: 24
+  latent_height: 48
+  latent_width: 84
+  frame_sampling: contiguous
+  source_fps_policy: audit_only
+  random_start: false
+  fixed_start_from_index: true
+  resolution_label: default
+  max_relative_translation: 20.0
+  max_camera_absolute_value: 20.0
+  seed: 42
+  shuffle_buffer: 64
+
+preencode:
+  codec_protocol: solarwm.minimax_h3.codec.v1
+  output_root: /path/to/output/h3-158f-preencoded
+  samples_per_shard: 8
+
+runtime:
+  output_dir: outputs/minimax-h3-preencode-158f

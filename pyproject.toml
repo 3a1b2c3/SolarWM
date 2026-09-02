@@ -1,0 +1,88 @@
+[build-system]
+requires = ["setuptools>=77", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "solarwm"
+version = "0.1.0"
+description = "A reproducible multi-backbone framework for interactive video world models."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+authors = [{name = "SolarWM Contributors"}]
+dependencies = [
+  "numpy>=1.24",
+  "PyYAML>=6.0",
+]
+
+[project.optional-dependencies]
+train = [
+  "torch>=2.5",
+  "safetensors>=0.4",
+  "einops>=0.8",
+  "decord>=0.6",
+]
+wan = [
+  # Matches the release-tested Wan runtime and its UniPC scheduler behavior.
+  "diffusers==0.38.0",
+  "flash-attn==2.8.3",
+  "ftfy>=6.2",
+  "omegaconf>=2.3",
+  "regex>=2024.0",
+  "transformers==5.12.1",
+  "peft==0.20.0",
+]
+h3 = [
+  "flash-attn==2.8.3",
+  "imageio==2.37.4",
+  "imageio-ffmpeg==0.6.0",
+]
+ltx = [
+  # The official ltx_core and ltx_pipelines modules are installed from LTX-2.
+  "peft",
+  "av",
+]
+dev = [
+  "build>=1.2",
+  "decord>=0.6",
+  "diffusers==0.38.0",
+  "einops>=0.8",
+  "ftfy>=6.2",
+  "pytest>=8.0",
+  "pytest-cov>=5.0",
+  "regex>=2024.0",
+  "ruff>=0.16",
+  "safetensors>=0.4",
+  "torch>=2.5",
+  "transformers>=4.46.2",
+]
+
+[project.scripts]
+solarwm = "solarwm.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"solarwm.backends.wan22.runtime.architectures" = ["*.json"]
+"solarwm.backends.wan22.runtime.modeling" = ["NOTICE.md"]
+
+# flash-attn imports torch from setup.py.  Keep build isolation, but augment the
+# isolated build environment with the exact torch selected for the runtime.
+[tool.uv.extra-build-dependencies]
+flash-attn = [{ requirement = "torch", match-runtime = true }]
+
+[tool.pytest.ini_options]
+addopts = "-ra --strict-config --strict-markers --import-mode=importlib"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]

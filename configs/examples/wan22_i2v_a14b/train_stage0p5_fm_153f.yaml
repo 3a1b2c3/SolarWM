@@ -1,0 +1,96 @@
+schema: solarwm.run.v1
+action: train
+name: wan22-i2v-a14b-stage0p5-fm-153f
+model:
+  family: wan22_i2v_a14b
+  name: Wan2.2-I2V-A14B-High-Camera
+  base_path: /path/to/Wan2.2-I2V-A14B
+  assets:
+    transformer_config: builtin
+    transformer_weights: transformer
+    text_encoder: text_encoder/models_t5_umt5-xxl-enc-bf16.pth
+    tokenizer: tokenizer
+    vae: vae/Wan2.1_VAE.pth
+  timestep_shift: 3.0
+  causal: false
+  camera_attention_mode: fused_prope
+  camera_translation_transform: linear
+  latent_channels: 16
+  frame_sequence_length: 1560
+  num_frame_per_block: 3
+  num_output_frames: 39
+  local_attn_size: 39
+  use_echorope: true
+data:
+  encoding: preencoded
+  preencode_schema: solarwm.wan22_i2v_a14b.480p.153f.v1
+  preencode_window_assignment: materialized_index_v1
+  latent_dtype: bfloat16
+  latent_shape: [39, 16, 60, 104]
+  prompt_shape: [512, 4096]
+  i2v_y_shape: [39, 20, 60, 104]
+  caption_source: frozen
+  camera_source: preserve
+  camera_array_key: c2w
+  transport: {kind: local, root: /path/to/SolarWM-Data/releases-v1}
+  index_root: /path/to/SolarWM-Data/releases-v1
+  train_index: recipes/clean-153f/latent-wds/wan22-i2v-a14b-153f-480p-v1/train-index.jsonl.gz
+  test_index: recipes/clean-153f/raw-wds/test-index.jsonl.gz
+  pixel_frames: 153
+  latent_frames: 39
+  height: 480
+  width: 832
+  fps: 16.0
+  max_rel_translation: 20.0
+  max_camera_abs: 20.0
+  random_start: false
+  streaming_index: true
+  partition_mode: node_shard
+  shuffle_buffer: 32
+  seed: 42
+  num_workers: 8
+  prefetch_factor: 4
+  gcs_prefetch_shards: 32  # Only applies when data.transport.kind is gcs.
+distributed:
+  world_size: 256
+  sequence_parallel_size: 2
+  sequence_layout: whole_frame_uneven
+  sp_frame_splits: [20, 19]
+  sp_token_splits: [31200, 29640]
+  sample_sharding: logical_dp
+  rng_scope: logical_dp
+train:
+  stage: stage0p5
+  causal_mode: bidirectional
+  objective: flow_matching
+  micro_batch_size: 1
+  grad_accum: 1
+  global_batch_size: 128
+  max_steps: 30000
+  warmup_steps: 1000
+  timestep_mode: uniform_per_video
+  num_train_timesteps: 1000
+  i2v_image_condition_dropout: 0.1
+  optimizer: {lr: 5.0e-5, betas: [0.9, 0.95], eps: 1.0e-8, weight_decay: 0.01, grad_clip: 1.0}
+  ema: {enabled: true, device: cuda, dtype: float32, sharded: true, decay: 0.9999, start_step: 0, update_every: 1}
+  fsdp: {strategy: FULL_SHARD, activation_checkpointing: true, param_dtype: bfloat16, reduce_dtype: float32, buffer_dtype: bfloat16}
+validation:
+  sample_count: 256
+  selection_seed: 42
+  noise_seed: 42
+  max_rel_translation: null
+  max_camera_abs: null
+  passes:
+    - {name: live_bidirectional_153f, weights: live, mode: bidirectional, solver: unipc, num_inference_steps: 50, rollout_latent_frames: 39}
+    - {name: ema_bidirectional_153f, weights: ema, mode: bidirectional, solver: unipc, num_inference_steps: 50, rollout_latent_frames: 39}
+checkpoint:
+  mode: weights_only
+  path: /path/to/a14b-stage0p5-81f-step22000/model.pt
+  weights: [live, ema]
+  source_step: 22000
+  source_contract: {stage: stage0p5, objective: flow_matching, camera_translation_transform: linear}
+runtime:
+  output_dir: /path/to/outputs/wan22-i2v-a14b-stage0p5-fm-153f
+  compile_flex: false
+  save_every: 500
+  validate_every: 500

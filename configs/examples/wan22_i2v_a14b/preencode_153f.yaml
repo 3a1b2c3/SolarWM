@@ -1,0 +1,35 @@
+schema: solarwm.run.v1
+action: preencode
+name: wan22-i2v-a14b-preencode-153f
+model:
+  family: wan22_i2v_a14b
+  base_path: /path/to/Wan2.2-I2V-A14B
+  assets:
+    transformer_config: builtin
+    transformer_weights: transformer
+    text_encoder: text_encoder/models_t5_umt5-xxl-enc-bf16.pth
+    tokenizer: tokenizer
+    vae: vae/Wan2.1_VAE.pth
+data:
+  transport: {kind: local, root: /path/to/SolarWM-Data/releases-v1}
+  index_root: /path/to/wan153f-fixed-window-index
+  index: preencode-window-index.jsonl.gz
+  pixel_frames: 153
+  height: 480
+  width: 832
+  fps: 16.0
+  camera_array_key: c2w
+  max_rel_translation: 20.0
+  max_camera_abs: 20.0
+runtime:
+  output_dir: /path/to/outputs/wan22-i2v-a14b-preencode
+preencode:
+  schema: solarwm.wan22_i2v_a14b.480p.153f.v1
+  generation_id: wan22-i2v-a14b-153f-480p-v1
+  output_root: /path/to/latent-dataset-root/wan22-i2v-a14b-153f-480p-v1
+  logical_output_root: /path/to/datasets/wan22-i2v-a14b-153f
+  dtype: bfloat16
+  caption_source: frozen
+  camera_source: preserve
+  shard_max_samples: 64
+  shard_max_bytes: 2147483648

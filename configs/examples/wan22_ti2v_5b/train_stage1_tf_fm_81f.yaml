@@ -1,0 +1,91 @@
+schema: solarwm.run.v1
+action: train
+name: wan22-ti2v-5b-stage1-tf-fm-81f
+model:
+  family: wan22_ti2v_5b
+  name: Wan2.2-TI2V-5B-Camera
+  base_path: /path/to/Wan2.2-TI2V-5B
+  assets:
+    transformer_config: builtin
+    transformer_weights: transformer
+    text_encoder: text_encoder/models_t5_umt5-xxl-enc-bf16.pth
+    tokenizer: tokenizer
+    vae: vae/Wan2.2_VAE.pth
+  timestep_shift: 5.0
+  causal: true
+  camera_attention_mode: fused_prope
+  camera_translation_transform: linear
+  latent_channels: 48
+  frame_sequence_length: 405
+  num_frame_per_block: 3
+  num_output_frames: 21
+  max_prior_clean_chunks: 5
+  local_attn_size: 21
+  use_echorope: false
+data:
+  encoding: online
+  latent_dtype: bfloat16
+  latent_shape: [21, 48, 30, 54]
+  prompt_shape: [512, 4096]
+  caption_source: frozen
+  camera_source: preserve
+  camera_array_key: c2w
+  transport: {kind: local, root: /path/to/SolarWM-Data/releases-v1}
+  index_root: /path/to/SolarWM-Data/releases-v1
+  train_index: recipes/clean-81f/raw-wds/train-index.jsonl.gz
+  test_index: recipes/clean-81f/raw-wds/test-index.jsonl.gz
+  pixel_frames: 81
+  latent_frames: 21
+  height: 480
+  width: 864
+  fps: 16.0
+  max_rel_translation: 20.0
+  max_camera_abs: 20.0
+  random_start: true
+  streaming_index: true
+  partition_mode: node_shard
+  shuffle_buffer: 64
+  seed: 42
+  num_workers: 8
+  prefetch_factor: 4
+  gcs_prefetch_shards: 32  # Only applies when data.transport.kind is gcs.
+distributed: {world_size: 256, sequence_parallel_size: 1, sample_sharding: logical_dp, rng_scope: logical_dp}
+train:
+  stage: stage1
+  causal_mode: teacher_forcing
+  objective: flow_matching
+  micro_batch_size: 1
+  grad_accum: 1
+  global_batch_size: 256
+  max_steps: 20000
+  warmup_steps: 500
+  timestep_mode: per_block
+  num_train_timesteps: 1000
+  noise_augmentation_max_timestep: 0
+  i2v_image_condition_dropout: 0.1
+  optimizer: {lr: 5.0e-5, betas: [0.9, 0.95], eps: 1.0e-8, weight_decay: 0.01, grad_clip: 1.0}
+  ema: {enabled: true, device: cuda, dtype: float32, sharded: true, decay: 0.9999, start_step: 0, update_every: 1}
+  fsdp: {strategy: HYBRID_SHARD, activation_checkpointing: true, param_dtype: bfloat16, reduce_dtype: float32, buffer_dtype: bfloat16}
+validation:
+  sample_count: 256
+  selection_seed: 42
+  noise_seed: 42
+  max_rel_translation: null
+  max_camera_abs: null
+  variable_rollout_by_source: true
+  min_rollout_latent_frames: 21
+  fixed_plan_pixel_frames: 237
+  passes:
+    - {name: live_autoregressive_source_length, weights: live, mode: autoregressive, solver: unipc, num_inference_steps: 50, rollout_latent_frames: 60}
+    - {name: ema_autoregressive_source_length, weights: ema, mode: autoregressive, solver: unipc, num_inference_steps: 50, rollout_latent_frames: 60}
+checkpoint:
+  mode: weights_only
+  path: /path/to/stage0p5-checkpoint/model.pt
+  weights: ema
+  source_step: 30000
+  source_contract: {stage: stage0p5, objective: flow_matching, camera_translation_transform: linear}
+runtime:
+  output_dir: /path/to/outputs/wan22-ti2v-5b-stage1-tf-fm-81f
+  compile_flex: true
+  save_every: 500
+  validate_every: 500

@@ -1,0 +1,25 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+build/
+dist/
+.venv/
+.venv
+venv/
+# Backend images intentionally use incompatible torch/CUDA stacks; a single
+# cross-extra lock would falsely imply one supported combined environment.
+uv.lock
+outputs/
+runs/
+checkpoints/
+*.pt
+*.pth
+*.safetensors
+*.tar
+*.tar.gz
+*.part
+.env

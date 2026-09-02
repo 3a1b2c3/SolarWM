@@ -1,0 +1,83 @@
+name: cpu-contracts
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.10', '3.11', '3.12']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install --index-url https://download.pytorch.org/whl/cpu 'torch>=2.5'
+      - run: python -m pip install -e '.[dev]'
+      - run: ruff check src tests
+      - run: ruff format --check src tests
+      - run: pytest -q
+      - name: Validate every example config
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import subprocess
+          import sys
+
+          configs = sorted(Path("configs/examples").rglob("*.yaml"))
+          assert configs
+          for config in configs:
+              subprocess.run(
+                  [sys.executable, "-m", "solarwm", "config", "resolve", "--config", str(config)],
+                  check=True,
+                  stdout=subprocess.DEVNULL,
+              )
+          print(f"validated {len(configs)} example configs")
+          PY
+      - run: python -m build
+      - name: Verify package artifacts
+        run: |
+          python - <<'PY'
+          import glob
+          import tarfile
+          import zipfile
+
+          wheels = glob.glob("dist/*.whl")
+          sdists = glob.glob("dist/*.tar.gz")
+          assert len(wheels) == 1, wheels
+          assert len(sdists) == 1, sdists
+
+          with zipfile.ZipFile(wheels[0]) as archive:
+              names = set(archive.namelist())
+          required_wheel = {
+              "solarwm/backends/wan22/runtime/architectures/i2v_a14b.json",
+              "solarwm/backends/wan22/runtime/architectures/ti2v_5b.json",
+              "solarwm/backends/wan22/runtime/modeling/NOTICE.md",
+          }
+          assert required_wheel <= names, sorted(required_wheel - names)
+          assert any(name.endswith(".dist-info/licenses/LICENSE") for name in names)
+          assert any(name.endswith(".dist-info/licenses/NOTICE") for name in names)
+
+          with tarfile.open(sdists[0], "r:gz") as archive:
+              names = {name.split("/", 1)[-1] for name in archive.getnames()}
+          required_sdist = {
+              "CONTRIBUTING.md",
+              "SECURITY.md",
+              "configs/examples/wan22_ti2v_5b/train_stage0p5_fm_81f.yaml",
+          }
+          assert required_sdist <= names, sorted(required_sdist - names)
+          PY
+          python -m pip install --force-reinstall --no-deps dist/*.whl
+          pushd /tmp
+          python -m solarwm --version
+          python -m solarwm config routes
+          popd
