@@ -21,11 +21,17 @@ _SCHEMA = "solarwm.validation-plan.v1"
 def validation_plan_key(backend: str, config: Mapping[str, Any]) -> str:
     """Bind a frozen plan to every config field that can affect case identity."""
 
+    data = config.get("data")
+    if isinstance(data, Mapping):
+        data = dict(data)
+        # Node-local I/O lookahead changes only when shard reads are issued. It
+        # does not change the selected validation rows, starts, or noise.
+        data.pop("gcs_prefetch_shards", None)
     payload = {
         "schema": "solarwm.validation-plan-key.v1",
         "backend": str(backend),
         "model": config.get("model"),
-        "data": config.get("data"),
+        "data": data,
         "distributed": config.get("distributed"),
         "validation": config.get("validation"),
     }

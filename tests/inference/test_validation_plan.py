@@ -69,6 +69,16 @@ def test_validation_plan_is_created_once_and_loaded_exactly(tmp_path: Path) -> N
     )
 
 
+def test_validation_plan_key_ignores_gcs_prefetch_tuning_only() -> None:
+    config = _config()
+    key = validation_plan_key("test", config)
+    tuned = {**config, "data": {**config["data"], "gcs_prefetch_shards": 32}}
+    drifted = {**config, "data": {**config["data"], "test_index": "other.jsonl.gz"}}
+
+    assert validation_plan_key("test", tuned) == key
+    assert validation_plan_key("test", drifted) != key
+
+
 def test_validation_plan_preserves_repeated_samples_in_distinct_slots(tmp_path: Path) -> None:
     cases = list(_cases())
     cases[1] = InferenceCase(
