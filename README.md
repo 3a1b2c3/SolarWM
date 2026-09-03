@@ -26,7 +26,7 @@ Mike Zheng Shou<sup>3</sup> &nbsp; Li Jiang<sup>1,2</sup>
   <a href="https://huggingface.co/datasets/junchaoh-cs/SolarWM-Data"><img alt="Hugging Face dataset" src="https://img.shields.io/badge/%F0%9F%A4%97-Dataset-yellow"></a>
   <a href="https://modelscope.cn/datasets/junchao2003/SolarWM-Data"><img alt="ModelScope dataset" src="https://img.shields.io/badge/-Dataset-624AFF?logo=modelscope&amp;logoColor=white&amp;labelColor=555"></a>
   <a href="https://docs.google.com/forms/d/e/1FAIpQLSfS-SLOiSRVDWwZ2kPl9ywN27aB6QplN0jpdKaBu-gG8aNsvQ/viewform"><img alt="Dataset Access Form" src="https://img.shields.io/badge/-Dataset%20Access%20Form-7248B9?logo=googleforms&amp;logoColor=white&amp;labelColor=555"></a>
-  <a href="https://huggingface.co/junchaoh-cs/SolarWM"><img alt="Model weights" src="https://img.shields.io/badge/%F0%9F%A4%97-Model%20Weights-yellow"></a>
+  <a href="https://huggingface.co/collections/junchaoh-cs/solarwm"><img alt="Model weights" src="https://img.shields.io/badge/%F0%9F%A4%97-Model%20Weights-yellow"></a>
   <a href="LICENSE"><img alt="Apache 2.0 license" src="https://img.shields.io/badge/License-Apache%202.0-green"></a>
 </p>
 
@@ -94,8 +94,8 @@ python -m pip install -e .
 solarwm environment probe
 ```
 
-Model weights are available from
-[`junchaoh-cs/SolarWM`](https://huggingface.co/junchaoh-cs/SolarWM). See the
+Model weights are available from the
+[`SolarWM model collection`](https://huggingface.co/collections/junchaoh-cs/solarwm). See the
 [Wan2.2 TI2V-5B guide](docs/backends/wan22-ti2v-5b.md) for Stage0.5, Stage1,
 and Stage2 commands. Data access options are described below.
 
