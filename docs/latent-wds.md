@@ -20,7 +20,7 @@ SolarWM-Data release. Repository links will be added as uploads complete.
 |---|---|
 | `wan22-ti2v5b-81f-480p-v1` | Coming soon |
 | `wan22-ti2v5b-81f-720p-v1` | Coming soon |
-| `wan22-ti2v5b-153f-480p-v1` | [ModelScope](https://modelscope.ai/datasets/Junchao-cs/SolarWM-Data_Latent-WDS_wan22-ti2v5b-153f-480p-v1) |
+| `wan22-ti2v5b-153f-480p-v1` | [ModelScope International](https://modelscope.ai/datasets/Junchao-cs/SolarWM-Data_Latent-WDS_wan22-ti2v5b-153f-480p-v1) · [ModelScope China](https://modelscope.cn/datasets/junchao2003/SolarWM-Data_Latent-WDS_wan22-ti2v5b-153f-480p-v1) |
 | `wan22-ti2v5b-153f-720p-v1` | Coming soon |
 | `wan22-ti2v5b-957f-480p-v1` | Coming soon |
 | `wan22-ti2v5b-957f-720p-v1` | Coming soon |
