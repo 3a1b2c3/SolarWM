@@ -23,8 +23,10 @@ pipeline owns an audio_vae. SolarWM's own H3 path only ever encodes silence.
 from __future__ import annotations
 
 import argparse
+import json
 import subprocess
 import sys
+import time
 import wave
 from pathlib import Path
 
@@ -119,6 +121,104 @@ def mux(video_path: Path, wav_path: Path, out_path: Path) -> bool:
     return True
 
 
+def generate_one(
+    pipe,
+    *,
+    prompt: str,
+    image_path: Path | None,
+    last_image_path: Path | None,
+    num_frames: int,
+    height: int,
+    width: int,
+    steps: int,
+    fps: int,
+    seed: int,
+    output_dir: Path,
+    name: str,
+    keep_wav: bool,
+) -> Path:
+    """Run one generation on an already-loaded pipeline and write {name}.mp4."""
+    num_frames = round_to_h3_frames(num_frames)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    call_kwargs = {
+        "prompt": prompt,
+        "num_frames": num_frames,
+        "height": height,
+        "width": width,
+        "num_inference_steps": steps,
+        "generator": torch.Generator(device="cuda").manual_seed(seed),
+        "output_type": "np",
+    }
+    if image_path:
+        call_kwargs["image"] = Image.open(image_path).convert("RGB")
+    if last_image_path:
+        call_kwargs["last_image"] = Image.open(last_image_path).convert("RGB")
+
+    print(f"Generating {num_frames} frames at {width}x{height}, {steps} steps ({name})...", flush=True)
+    gen_start = time.perf_counter()
+    output = pipe(**call_kwargs)
+    gen_elapsed = time.perf_counter() - gen_start
+    print(
+        f"generation: {num_frames} frames in {gen_elapsed:.2f}s "
+        f"({num_frames / gen_elapsed:.3f} fps, {gen_elapsed / steps:.3f} s/step)",
+        flush=True,
+    )
+
+    videos = getattr(output, "videos", None)
+    audio = getattr(output, "audio", None)
+    sampling_rate = getattr(output, "sampling_rate", None)
+    if videos is None:
+        raise RuntimeError(f"pipeline returned no 'videos'; got {type(output).__name__}")
+
+    frames = to_uint8_frames(videos)
+    silent_path = output_dir / f"{name}_silent.mp4"
+    final_path = output_dir / f"{name}.mp4"
+
+    import imageio.v2 as imageio
+
+    imageio.mimwrite(str(silent_path), frames, fps=fps, quality=8)
+    print(f"video: {silent_path}  ({frames.shape[0]} frames)")
+
+    if audio is None or sampling_rate is None:
+        print("NOTE: pipeline returned no audio; keeping the silent mp4 only.")
+        silent_path.replace(final_path)
+        print(f"done: {final_path}")
+        return final_path
+
+    samples = to_int16_audio(audio)
+    wav_path = output_dir / f"{name}.wav"
+    write_wav(wav_path, samples, sampling_rate)
+    print(f"audio: {wav_path}  ({samples.shape[0]} samples @ {sampling_rate} Hz, {samples.shape[1]}ch)")
+
+    if mux(silent_path, wav_path, final_path):
+        silent_path.unlink()
+        # The wav is only an intermediate -- the muxed mp4 already carries the audio
+        # track. Keep it only when explicitly asked for.
+        if keep_wav:
+            print(f"done: {final_path}  (video + audio, wav kept)")
+        else:
+            wav_path.unlink()
+            print(f"done: {final_path}  (video + audio)")
+    return final_path
+
+
+def load_pipeline(model_path: str, workflow: str):
+    print(f"Loading {model_path} (workflow={workflow})...", flush=True)
+    # workflow= keeps the loader from pulling both transformer partitions.
+    pipe = MiniMaxH3ModularPipeline.from_pretrained(model_path, workflow=workflow)
+    # from_pretrained only builds the pipeline from its config -- every component stays
+    # None until load_components() runs. Skipping this surfaces later as a confusing
+    # "'NoneType' object has no attribute 'image_processor'" inside the encoder block.
+    print("Loading components (this pulls the transformer partition; expect it to be slow)...", flush=True)
+    # No workflow= here: from_pretrained already selected it, collapsing the blocks into
+    # SequentialPipelineBlocks, which has no _workflow_map. Passing it again raises
+    # "workflows is not supported because _workflow_map is not set".
+    pipe.load_components(torch_dtype=torch.bfloat16)
+    pipe.to("cuda")
+    return pipe
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="MiniMax-H3 video+audio inference.")
     parser.add_argument("--model-path", default=DEFAULT_MODEL_PATH)
@@ -136,98 +236,75 @@ def main() -> int:
     parser.add_argument("--output-dir", type=Path, default=Path("outputs/h3"))
     parser.add_argument("--name", default="h3_sample")
     parser.add_argument("--keep-wav", action="store_true", help="keep the intermediate wav alongside the muxed mp4")
+    parser.add_argument(
+        "--mind-batch", type=Path, default=None,
+        help="JSON manifest (list of {prompt, image, out_dir, name, num_frames?, seed?}) -- "
+             "loads the pipeline ONCE and loops every entry (always fl2va: every entry needs "
+             "'image'). Overrides --prompt/--image/--out-dir/--name/single-run behavior.",
+    )
     args = parser.parse_args()
+
+    if not torch.cuda.is_available():
+        print("ERROR: no CUDA device visible.", file=sys.stderr)
+        return 2
+
+    if args.mind_batch:
+        entries = json.loads(args.mind_batch.read_text(encoding="utf-8"))
+        if not entries:
+            print("[h3-batch] empty manifest, nothing to do")
+            return 0
+        for e in entries:
+            if not e.get("image"):
+                print(f"ERROR: --mind-batch entry missing 'image' (fl2va needs one): {e}", file=sys.stderr)
+                return 2
+        pipe = load_pipeline(args.model_path, "fl2va")
+        for i, e in enumerate(entries):
+            print(f"[h3-batch] {i + 1}/{len(entries)}: {e.get('name', 'sample')}", flush=True)
+            generate_one(
+                pipe,
+                prompt=e["prompt"],
+                image_path=Path(e["image"]),
+                last_image_path=Path(e["last_image"]) if e.get("last_image") else None,
+                num_frames=int(e.get("num_frames", args.num_frames)),
+                height=int(e.get("height", args.height)),
+                width=int(e.get("width", args.width)),
+                steps=int(e.get("steps", args.steps)),
+                fps=int(e.get("fps", args.fps)),
+                seed=int(e.get("seed", args.seed)),
+                output_dir=Path(e["out_dir"]),
+                name=e.get("name", "video"),
+                keep_wav=args.keep_wav,
+            )
+        print(f"[h3-batch] done: {len(entries)} generated")
+        return 0
 
     if args.prompt_file:
         args.prompt = args.prompt_file.read_text(encoding="utf-8").strip()
     if not args.prompt:
-        print("ERROR: pass --prompt or --prompt-file", file=sys.stderr)
+        print("ERROR: pass --prompt or --prompt-file (or --mind-batch)", file=sys.stderr)
         return 2
 
     workflow = args.workflow or ("fl2va" if args.image or args.last_image else "t2va")
     if workflow == "fl2va" and not (args.image or args.last_image):
         print("ERROR: fl2va needs --image and/or --last-image", file=sys.stderr)
         return 2
-    if not torch.cuda.is_available():
-        print("ERROR: no CUDA device visible.", file=sys.stderr)
-        return 2
 
-    rounded_frames = round_to_h3_frames(args.num_frames)
-    if rounded_frames != args.num_frames:
-        print(
-            f"NOTE: --num-frames {args.num_frames} isn't encodable by the H3 VAE "
-            f"(needs 17*n+5 in [120,360]); using {rounded_frames} instead.",
-            flush=True,
-        )
-        args.num_frames = rounded_frames
-
-    args.output_dir.mkdir(parents=True, exist_ok=True)
-
-    print(f"Loading {args.model_path} (workflow={workflow})...", flush=True)
-    # workflow= keeps the loader from pulling both transformer partitions.
-    pipe = MiniMaxH3ModularPipeline.from_pretrained(args.model_path, workflow=workflow)
-    # from_pretrained only builds the pipeline from its config -- every component stays
-    # None until load_components() runs. Skipping this surfaces later as a confusing
-    # "'NoneType' object has no attribute 'image_processor'" inside the encoder block.
-    print("Loading components (this pulls the transformer partition; expect it to be slow)...", flush=True)
-    # No workflow= here: from_pretrained already selected it, collapsing the blocks into
-    # SequentialPipelineBlocks, which has no _workflow_map. Passing it again raises
-    # "workflows is not supported because _workflow_map is not set".
-    pipe.load_components(torch_dtype=torch.bfloat16)
-    pipe.to("cuda")
-
-    call_kwargs = {
-        "prompt": args.prompt,
-        "num_frames": args.num_frames,
-        "height": args.height,
-        "width": args.width,
-        "num_inference_steps": args.steps,
-        "generator": torch.Generator(device="cuda").manual_seed(args.seed),
-        "output_type": "np",
-    }
-    if args.image:
-        call_kwargs["image"] = Image.open(args.image).convert("RGB")
-    if args.last_image:
-        call_kwargs["last_image"] = Image.open(args.last_image).convert("RGB")
-
-    print(f"Generating {args.num_frames} frames at {args.width}x{args.height}, {args.steps} steps...", flush=True)
-    output = pipe(**call_kwargs)
-
-    videos = getattr(output, "videos", None)
-    audio = getattr(output, "audio", None)
-    sampling_rate = getattr(output, "sampling_rate", None)
-    if videos is None:
-        raise RuntimeError(f"pipeline returned no 'videos'; got {type(output).__name__}")
-
-    frames = to_uint8_frames(videos)
-    silent_path = args.output_dir / f"{args.name}_silent.mp4"
-    final_path = args.output_dir / f"{args.name}.mp4"
-
-    import imageio.v2 as imageio
-
-    imageio.mimwrite(str(silent_path), frames, fps=args.fps, quality=8)
-    print(f"video: {silent_path}  ({frames.shape[0]} frames)")
-
-    if audio is None or sampling_rate is None:
-        print("NOTE: pipeline returned no audio; keeping the silent mp4 only.")
-        silent_path.replace(final_path)
-        print(f"done: {final_path}")
-        return 0
-
-    samples = to_int16_audio(audio)
-    wav_path = args.output_dir / f"{args.name}.wav"
-    write_wav(wav_path, samples, sampling_rate)
-    print(f"audio: {wav_path}  ({samples.shape[0]} samples @ {sampling_rate} Hz, {samples.shape[1]}ch)")
-
-    if mux(silent_path, wav_path, final_path):
-        silent_path.unlink()
-        # The wav is only an intermediate -- the muxed mp4 already carries the audio
-        # track. Keep it only when explicitly asked for.
-        if args.keep_wav:
-            print(f"done: {final_path}  (video + audio, wav kept)")
-        else:
-            wav_path.unlink()
-            print(f"done: {final_path}  (video + audio)")
+    pipe = load_pipeline(args.model_path, workflow)
+    generate_one(
+        pipe,
+        prompt=args.prompt,
+        image_path=args.image,
+        last_image_path=args.last_image,
+        num_frames=args.num_frames,
+        height=args.height,
+        width=args.width,
+        steps=args.steps,
+        fps=args.fps,
+        seed=args.seed,
+        output_dir=args.output_dir,
+        name=args.name,
+        keep_wav=args.keep_wav,
+    )
     return 0
 
 
