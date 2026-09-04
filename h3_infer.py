@@ -104,7 +104,8 @@ def mux(video_path: Path, wav_path: Path, out_path: Path) -> bool:
 def main() -> int:
     parser = argparse.ArgumentParser(description="MiniMax-H3 video+audio inference.")
     parser.add_argument("--model-path", default=DEFAULT_MODEL_PATH)
-    parser.add_argument("--prompt", required=True)
+    parser.add_argument("--prompt")
+    parser.add_argument("--prompt-file", type=Path, help="read the prompt from a file, e.g. examples/racer/prompt.txt")
     parser.add_argument("--image", type=Path, help="first frame; omit for the t2va workflow")
     parser.add_argument("--last-image", type=Path)
     parser.add_argument("--workflow", choices=("t2va", "fl2va", "ref2va"))
@@ -117,6 +118,12 @@ def main() -> int:
     parser.add_argument("--output-dir", type=Path, default=Path("outputs/h3"))
     parser.add_argument("--name", default="h3_sample")
     args = parser.parse_args()
+
+    if args.prompt_file:
+        args.prompt = args.prompt_file.read_text(encoding="utf-8").strip()
+    if not args.prompt:
+        print("ERROR: pass --prompt or --prompt-file", file=sys.stderr)
+        return 2
 
     workflow = args.workflow or ("fl2va" if args.image or args.last_image else "t2va")
     if workflow == "fl2va" and not (args.image or args.last_image):
