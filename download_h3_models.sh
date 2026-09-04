@@ -25,6 +25,17 @@ cd "$HERE"
 
 SOLAR_MODEL_ROOT="${SOLAR_MODEL_ROOT:-$HERE/../SolarWM-models}"
 
+# Shared HF cache, sibling of SolarWM-models, so every project/venv on this box
+# stages through one cache instead of a per-user ~/.cache copy. Set HF_HOME
+# (modern single knob) and HF_HUB_CACHE (older tooling reads only this one).
+# Keep HF_TOKEN in the environment -- do not 'hf auth login', which would write
+# a token file into the shared cache.
+SHARED_HF_ROOT="${SHARED_HF_ROOT:-$HERE/../.cache/hf}"
+mkdir -p "$SHARED_HF_ROOT/hub"
+export HF_HOME="$SHARED_HF_ROOT"
+export HF_HUB_CACHE="$SHARED_HF_ROOT/hub"
+echo "[solarwm-h3-download] shared HF cache: $SHARED_HF_ROOT"
+
 VENV="$HERE/.venv-h3"
 PY="$VENV/bin/python"
 if [ ! -x "$PY" ]; then
