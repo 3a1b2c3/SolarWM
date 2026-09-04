@@ -100,7 +100,7 @@ def _compose_c2w(num_latents: int, *, yaw_deg_per_frame: float, forward_step: fl
     return c2w
 
 
-def load_runtime(base_model: str, adapter: str, *, attention_backend: str = "_flash_3"):
+def load_runtime(base_model: str, adapter: str, *, attention_backend: str = "native"):
     """Load everything needed for generation ONCE: base model + LoRA + codec."""
     import torch
 
@@ -245,12 +245,13 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--base-model", required=True, help="SolarWM-h3-33B-base directory")
     ap.add_argument("--adapter", required=True, help="SolarWM-h3-33B-bid-stage0p5-158f directory")
-    ap.add_argument("--attention-backend", default="_flash_3",
-                    help="diffusers attention backend (default '_flash_3', matches the installed "
-                         "flash-attn-4 package -- it registers itself as flash_attn_interface, same "
-                         "module name diffusers' _flash_3 backend checks for. Try 'native' or 'sdpa' "
-                         "if flash-attn-4 isn't installed/usable; plain 'flash' needs classic FA2 "
-                         "(flash-attn), which failed to compile on this box)")
+    ap.add_argument("--attention-backend", default="native",
+                    help="diffusers attention backend (default 'native', the only backend "
+                         "confirmed working on this box so far. '_flash_3' worked once with "
+                         "flash-attn-4 installed but regressed to 'not usable' afterward -- "
+                         "root cause not yet diagnosed, suspected sageattention install side "
+                         "effect. Plain 'flash' needs classic FA2 (flash-attn), which failed to "
+                         "compile on this box)")
     ap.add_argument("--image", type=Path, help="first frame")
     ap.add_argument("--prompt", help=f"default: GENERIC_PROMPT ({GENERIC_PROMPT!r})")
     ap.add_argument("--prompt-file", type=Path)
