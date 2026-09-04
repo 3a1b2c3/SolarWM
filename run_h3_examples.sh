@@ -25,15 +25,17 @@ cd "$HERE"
 
 WHICH="racer"
 case "${1:-}" in
-  racer|screenshot|all) WHICH="$1"; shift ;;
+  racer|screenshot|man|all) WHICH="$1"; shift ;;
 esac
 
 SMALL=(--steps 30 --num-frames 61)
 PROMPT="$HERE/examples/racer/prompt.txt"
 IMG_RACER="$HERE/examples/first_frame.png"
 IMG_SHOT="$HERE/examples/racer/Screenshot.png"
+# The man case has no source image, so it runs t2va (prompt only) rather than fl2va.
+PROMPT_MAN="$HERE/examples/man/prompt.txt"
 
-for path in "$PROMPT" "$IMG_RACER" "$IMG_SHOT"; do
+for path in "$PROMPT" "$IMG_RACER" "$IMG_SHOT" "$PROMPT_MAN"; do
   if [ ! -e "$path" ]; then
     echo "ERROR: example asset missing: $path" >&2
     exit 1
@@ -57,13 +59,28 @@ run_case() {
     "$@"
 }
 
+run_man() {
+  echo "============================================================"
+  echo "Example: man (t2va -- prompt only, no source image)"
+  echo "============================================================"
+  bash "$HERE/run_h3_infer.sh" \
+    --prompt-file "$PROMPT_MAN" \
+    --width 832 --height 480 \
+    --name man \
+    "${SMALL[@]}" \
+    "$@"
+}
+
 case "$WHICH" in
   racer)      run_case racer "$IMG_RACER" 832 480 "$@" ;;
   screenshot) run_case screenshot "$IMG_SHOT" 640 352 "$@" ;;
+  man)        run_man "$@" ;;
   all)
     run_case racer "$IMG_RACER" 832 480 "$@"
     echo
     run_case screenshot "$IMG_SHOT" 640 352 "$@"
+    echo
+    run_man "$@"
     ;;
 esac
 
