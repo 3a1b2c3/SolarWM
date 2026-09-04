@@ -32,17 +32,16 @@ case "${1:-}" in
 esac
 
 STEPS=10
-PROMPT="$HERE/examples/racer/prompt.txt"
-PROMPT_LEFT="$HERE/examples/racer/prompt_left.txt"
-PROMPT_RIGHT="$HERE/examples/racer/prompt_right.txt"
 IMAGE="$HERE/examples/racer/Screenshot.png"
 
-for path in "$PROMPT" "$PROMPT_LEFT" "$PROMPT_RIGHT" "$IMAGE"; do
-  if [ ! -e "$path" ]; then
-    echo "ERROR: example asset missing: $path" >&2
-    exit 1
-  fi
-done
+# No prompt files anymore -- camera_c2w (via --direction) is the real
+# per-frame conditioning now, so h3_camera_infer.py's GENERIC_PROMPT default
+# (same neutral text for straight/left/right) is enough; direction-specific
+# prompt text was only ever a text hint, not real control.
+if [ ! -e "$IMAGE" ]; then
+  echo "ERROR: example asset missing: $IMAGE" >&2
+  exit 1
+fi
 
 VENV="$HERE/.venv-h3"
 PY="$VENV/bin/python"
@@ -63,8 +62,8 @@ for path in "$BASE_MODEL" "$ADAPTER"; do
 done
 
 run_case() {
-  local name="$1" direction="$2" prompt_file="$3"
-  shift 3
+  local name="$1" direction="$2"
+  shift 2
   echo "============================================================"
   echo "Example: $name (real camera-conditioned Stage0.5 generation, $direction)"
   echo "============================================================"
@@ -72,7 +71,6 @@ run_case() {
     --base-model "$BASE_MODEL" \
     --adapter "$ADAPTER" \
     --image "$IMAGE" \
-    --prompt-file "$prompt_file" \
     --direction "$direction" \
     --steps "$STEPS" \
     --out "$HERE/outputs/h3/$name.mp4" \
@@ -80,15 +78,15 @@ run_case() {
 }
 
 case "$WHICH" in
-  racer) run_case racer straight "$PROMPT" "$@" ;;
-  left)  run_case racer_left left "$PROMPT_LEFT" "$@" ;;
-  right) run_case racer_right right "$PROMPT_RIGHT" "$@" ;;
+  racer) run_case racer straight "$@" ;;
+  left)  run_case racer_left left "$@" ;;
+  right) run_case racer_right right "$@" ;;
   steer)
-    run_case racer straight "$PROMPT" "$@"
+    run_case racer straight "$@"
     echo
-    run_case racer_left left "$PROMPT_LEFT" "$@"
+    run_case racer_left left "$@"
     echo
-    run_case racer_right right "$PROMPT_RIGHT" "$@"
+    run_case racer_right right "$@"
     ;;
 esac
 

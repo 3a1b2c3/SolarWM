@@ -80,7 +80,12 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--video", required=True, type=Path)
     ap.add_argument("--actions", required=True, type=Path,
-                     help="[num_frames, 17] action matrix, e.g. from "
+                     help="[num_frames, 17] action matrix: cols 0-10 are KEY_COLS "
+                          "(W,A,S,D,Q,E,I,J,K,L,Space), cols 11-16 are 3 rotation + "
+                          "3 translation values. Only the 8 ACTIVE_KEY_COLS "
+                          "(W,A,S,D,I,J,K,L) are drawn/highlighted -- Q, E, Space, "
+                          "and the rotation/translation columns are present in the "
+                          "matrix but not rendered. e.g. from "
                           "examples/racer/build_direction_actions.py")
     ap.add_argument("--out", required=True, type=Path)
     args = ap.parse_args()

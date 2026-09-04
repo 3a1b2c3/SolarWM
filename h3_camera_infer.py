@@ -55,6 +55,13 @@ import json
 from pathlib import Path
 from typing import Any
 
+# Qwen's joint image+text encoder always needs SOME prompt string (there is
+# no code path to skip it), but it does not need to describe direction --
+# camera_c2w is the real per-frame conditioning now, so a fixed neutral
+# prompt is enough for straight/left/right alike. Matches MIND's
+# drive_solarwm.py --engine camera BASE_PROMPT.
+GENERIC_PROMPT = "Third-person view moving through the scene, consistent environment, realistic camera motion."
+
 
 def build_camera_c2w(direction: str, *, num_latents: int, yaw_deg: float, forward_step: float):
     """Author a synthetic [num_latents,4,4] absolute C2W trajectory.
@@ -93,7 +100,7 @@ def _compose_c2w(num_latents: int, *, yaw_deg_per_frame: float, forward_step: fl
     return c2w
 
 
-def load_runtime(base_model: str, adapter: str, *, attention_backend: str = "flash"):
+def load_runtime(base_model: str, adapter: str, *, attention_backend: str = "_flash_3"):
     """Load everything needed for generation ONCE: base model + LoRA + codec."""
     import torch
 
@@ -234,11 +241,14 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--base-model", required=True, help="SolarWM-h3-33B-base directory")
     ap.add_argument("--adapter", required=True, help="SolarWM-h3-33B-bid-stage0p5-158f directory")
-    ap.add_argument("--attention-backend", default="flash",
-                    help="diffusers attention backend (default 'flash', needs a working flash-attn "
-                         "build; try 'sdpa' or 'native' if flash-attn isn't installed/usable)")
+    ap.add_argument("--attention-backend", default="_flash_3",
+                    help="diffusers attention backend (default '_flash_3', matches the installed "
+                         "flash-attn-4 package -- it registers itself as flash_attn_interface, same "
+                         "module name diffusers' _flash_3 backend checks for. Try 'native' or 'sdpa' "
+                         "if flash-attn-4 isn't installed/usable; plain 'flash' needs classic FA2 "
+                         "(flash-attn), which failed to compile on this box)")
     ap.add_argument("--image", type=Path, help="first frame")
-    ap.add_argument("--prompt")
+    ap.add_argument("--prompt", help=f"default: GENERIC_PROMPT ({GENERIC_PROMPT!r})")
     ap.add_argument("--prompt-file", type=Path)
     ap.add_argument("--direction", choices=("straight", "left", "right"), default="straight")
     ap.add_argument("--yaw-deg", type=float, default=25.0, help="total yaw over the clip for left/right")
@@ -274,7 +284,7 @@ def main() -> int:
             generate_one(
                 runtime,
                 image_path=Path(e["image"]),
-                prompt=e["prompt"],
+                prompt=e.get("prompt") or GENERIC_PROMPT,
                 c2w=c2w,
                 steps=int(e.get("steps", args.steps)),
                 seed=int(e.get("seed", args.seed)),
@@ -289,7 +299,7 @@ def main() -> int:
     if args.prompt_file:
         prompt = args.prompt_file.read_text(encoding="utf-8").strip()
     if not prompt:
-        ap.error("pass --prompt or --prompt-file")
+        prompt = GENERIC_PROMPT
 
     runtime = load_runtime(args.base_model, args.adapter, attention_backend=args.attention_backend)
     c2w = build_camera_c2w(args.direction, num_latents=47, yaw_deg=args.yaw_deg, forward_step=args.forward_step)
