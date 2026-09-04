@@ -38,6 +38,15 @@ if [ ! -d "$MODEL_PATH" ]; then
   exit 1
 fi
 
+# No args at all -> run the bundled example rather than failing on a missing prompt.
+if [ "$#" -eq 0 ]; then
+  echo "[h3-infer] no arguments given -- running the bundled racer example."
+  echo "[h3-infer] (pass --prompt/--prompt-file for your own, or use run_h3_examples.sh)"
+  set -- --image "$HERE/examples/first_frame.png" \
+         --prompt-file "$HERE/examples/racer/prompt.txt" \
+         --width 832 --height 480 --steps 30 --num-frames 61 --name racer
+fi
+
 echo "[h3-infer] model : $MODEL_PATH"
 echo "[h3-infer] cache : $SHARED_HF_ROOT"
 nvidia-smi --query-gpu=index,name,memory.used,memory.total --format=csv,noheader || true

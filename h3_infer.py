@@ -137,11 +137,15 @@ def main() -> int:
 
     print(f"Loading {args.model_path} (workflow={workflow})...", flush=True)
     # workflow= keeps the loader from pulling both transformer partitions.
-    pipe = MiniMaxH3ModularPipeline.from_pretrained(
-        args.model_path,
-        workflow=workflow,
-        torch_dtype=torch.bfloat16,
-    )
+    pipe = MiniMaxH3ModularPipeline.from_pretrained(args.model_path, workflow=workflow)
+    # from_pretrained only builds the pipeline from its config -- every component stays
+    # None until load_components() runs. Skipping this surfaces later as a confusing
+    # "'NoneType' object has no attribute 'image_processor'" inside the encoder block.
+    print("Loading components (this pulls the transformer partition; expect it to be slow)...", flush=True)
+    # No workflow= here: from_pretrained already selected it, collapsing the blocks into
+    # SequentialPipelineBlocks, which has no _workflow_map. Passing it again raises
+    # "workflows is not supported because _workflow_map is not set".
+    pipe.load_components(torch_dtype=torch.bfloat16)
     pipe.to("cuda")
 
     call_kwargs = {
