@@ -1,14 +1,18 @@
 #!/bin/bash
-# Generate straight/left/right racer examples with SolarWM's h3_infer.py
-# (one model load via --mind-batch), then burn a WASDIJKL key overlay onto
-# each via ../overlay_keys.py. See build_direction_actions.py's docstring:
-# the action matrix fed to the overlay is a constant per-clip direction
-# LABEL (one key held the whole clip), not real per-frame action data --
-# SolarWM's base pipeline has no action-conditioning input at all, so
-# direction only comes from the prompt text (prompt.txt / prompt_left.txt /
-# prompt_right.txt).
+# Generate straight/left/right racer examples with REAL camera-conditioned
+# generation via ../../h3_camera_infer.py -- the trained Stage0.5 LoRA
+# adapter + a hand-authored per-frame camera trajectory, not a prompt-text
+# hint. See h3_camera_infer.py's docstring for the full explanation and its
+# real, unverified caveats (camera yaw sign/axis convention untested).
 #
-#   bash examples/racer/run_examples.sh [--num-frames N] [--steps N]
+# UNTESTED end to end -- no local GPU/Python available to run this tonight.
+# Expect to debug real errors on first run; report the traceback back.
+#
+# SLOW: h3_camera_infer.py has no batch mode (unlike h3_infer.py's
+# --mind-batch) -- it reloads the 33B model + LoRA + Qwen/VisualVAE/AudioVAE
+# on every invocation, so this script pays that cost 3x, once per direction.
+#
+#   bash examples/racer/run_examples.sh [--steps N]
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -21,11 +25,20 @@ if [ ! -x "$PY" ]; then
   exit 1
 fi
 
-NUM_FRAMES=158
-STEPS=50
+BASE_MODEL="${SOLAR_H3_BASE:-$ROOT/../SolarWM-models/SolarWM-h3-33B-base}"
+ADAPTER="${SOLAR_H3_ADAPTER:-$ROOT/../SolarWM-models/SolarWM-h3-33B-bid-stage0p5-158f}"
+for path in "$BASE_MODEL" "$ADAPTER"; do
+  if [ ! -e "$path" ]; then
+    echo "ERROR: expected path not found: $path" >&2
+    echo "  Override with SOLAR_H3_BASE= / SOLAR_H3_ADAPTER= if models live elsewhere," >&2
+    echo "  or run 'bash download_h3_models.sh' first." >&2
+    exit 1
+  fi
+done
+
+STEPS=30
 while [ $# -gt 0 ]; do
   case "$1" in
-    --num-frames) NUM_FRAMES="$2"; shift 2 ;;
     --steps) STEPS="$2"; shift 2 ;;
     *) echo "unknown arg: $1" >&2; exit 2 ;;
   esac
@@ -35,41 +48,27 @@ OUT_DIR="$ROOT/outputs/racer"
 mkdir -p "$OUT_DIR"
 IMAGE="$HERE/Screenshot.png"
 
-MANIFEST="$OUT_DIR/manifest.json"
-"$PY" - "$MANIFEST" "$IMAGE" "$HERE" "$OUT_DIR" "$NUM_FRAMES" "$STEPS" <<'PYEOF'
-import json, sys
-manifest_path, image, racer_dir, out_dir, num_frames, steps = sys.argv[1:]
-from pathlib import Path
-racer_dir = Path(racer_dir)
-entries = []
-for name, prompt_file in (("straight", "prompt.txt"), ("left", "prompt_left.txt"), ("right", "prompt_right.txt")):
-    entries.append({
-        "prompt": (racer_dir / prompt_file).read_text(encoding="utf-8").strip(),
-        "image": image,
-        "num_frames": int(num_frames),
-        "steps": int(steps),
-        "out_dir": out_dir,
-        "name": name,
-    })
-Path(manifest_path).write_text(json.dumps(entries))
-print(f"wrote {manifest_path}: {len(entries)} entries")
-PYEOF
-
-echo "[racer] generating straight/left/right (one model load)..."
-"$PY" "$ROOT/h3_infer.py" --mind-batch "$MANIFEST"
-
-echo "[racer] overlaying WASDIJKL key on each..."
 for d in straight left right; do
-  "$PY" "$HERE/build_direction_actions.py" \
-    --direction "$d" --num-frames "$NUM_FRAMES" \
-    --out "$OUT_DIR/${d}_actions.npy"
-  "$PY" "$ROOT/examples/overlay_keys.py" \
-    --video "$OUT_DIR/$d.mp4" --actions "$OUT_DIR/${d}_actions.npy" \
-    --out "$OUT_DIR/${d}_overlay.mp4"
+  case "$d" in
+    straight) prompt_file="$HERE/prompt.txt" ;;
+    left)     prompt_file="$HERE/prompt_left.txt" ;;
+    right)    prompt_file="$HERE/prompt_right.txt" ;;
+  esac
+  echo "============================================================"
+  echo "[racer] $d (real camera-conditioned Stage0.5 generation)"
+  echo "============================================================"
+  "$PY" "$ROOT/h3_camera_infer.py" \
+    --base-model "$BASE_MODEL" \
+    --adapter "$ADAPTER" \
+    --image "$IMAGE" \
+    --prompt-file "$prompt_file" \
+    --direction "$d" \
+    --steps "$STEPS" \
+    --out "$OUT_DIR/$d.mp4"
 done
 
 echo
 echo "Done. Outputs:"
-echo "  $OUT_DIR/straight_overlay.mp4"
-echo "  $OUT_DIR/left_overlay.mp4"
-echo "  $OUT_DIR/right_overlay.mp4"
+echo "  $OUT_DIR/straight.mp4"
+echo "  $OUT_DIR/left.mp4"
+echo "  $OUT_DIR/right.mp4"
