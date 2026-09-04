@@ -54,10 +54,23 @@ hf download junchaoh-cs/SolarWM \
   --include "SolarWM-h3-33B-*/**" \
   --local-dir "$SOLAR_MODEL_ROOT"
 
+# The base + Stage0.5 LoRA are both matched by the wildcard above, but the
+# LoRA adapter (h3_camera_infer.py's --adapter, MIND's drive_solarwm.py
+# --engine camera) is small (4.15GB) and easy to lose track of if a partial
+# download happened -- fetch it explicitly too so a re-run always confirms it.
+echo "[solarwm-h3-download] confirming SolarWM-h3-33B-bid-stage0p5-158f (Stage0.5 LoRA adapter)..."
+hf download junchaoh-cs/SolarWM \
+  --include "SolarWM-h3-33B-bid-stage0p5-158f/**" \
+  --local-dir "$SOLAR_MODEL_ROOT"
+
 echo
 echo "Done. SOLAR_MODEL_ROOT=$SOLAR_MODEL_ROOT"
 echo "Expect subfolders like SolarWM-h3-33B-base and SolarWM-h3-33B-bid-stage0p5-158f"
-echo "(the latter is what --set checkpoint.resume_from points at for inference)."
+echo "(the latter is what --set checkpoint.resume_from / h3_camera_infer.py's"
+echo "--adapter / drive_solarwm.py's --adapter-path point at)."
+if [ ! -d "$SOLAR_MODEL_ROOT/SolarWM-h3-33B-bid-stage0p5-158f" ]; then
+  echo "WARNING: SolarWM-h3-33B-bid-stage0p5-158f still not found under $SOLAR_MODEL_ROOT after download." >&2
+fi
 echo
 echo "Still needed before running inference: the minimax-h3-158f-768p-nomind-v1"
 echo "latent data under SOLAR_DATA_ROOT -- see docs/latent-wds.md. That data was"
