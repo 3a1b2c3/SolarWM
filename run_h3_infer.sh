@@ -17,10 +17,10 @@ cd "$HERE"
 
 MODEL_PATH="${MODEL_PATH:-$HERE/../SolarWM-models/SolarWM-h3-33B-base}"
 
-# Same shared cache the download script uses. The checkpoint's modular index names
-# component sources, so loading can still consult the Hub -- keep the cache shared
-# rather than letting it land in a per-user ~/.cache.
-SHARED_HF_ROOT="${SHARED_HF_ROOT:-$HERE/../.cache/hf}"
+# Same global cache the download script uses (~/.cache/huggingface). The checkpoint's
+# modular index names component sources, so loading can still consult the Hub -- point
+# it at the cache that already holds the weights rather than a fresh empty one.
+SHARED_HF_ROOT="${SHARED_HF_ROOT:-$HOME/.cache/huggingface}"
 mkdir -p "$SHARED_HF_ROOT/hub"
 export HF_HOME="$SHARED_HF_ROOT"
 export HF_HUB_CACHE="$SHARED_HF_ROOT/hub"
