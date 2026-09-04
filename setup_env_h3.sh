@@ -50,7 +50,40 @@ echo "[solarwm-h3-setup] installing SolarWM itself (train extras)..."
 "$PY" -m pip install -e ".[train]"
 
 echo "[solarwm-h3-setup] flash-attn (--no-build-isolation, unpinned, source build -- see script header)..."
-"$PY" -m pip install --no-build-isolation flash-attn
+# Confirmed the hard way on this GB300/aarch64 box: a plain `pip install
+# --no-build-isolation flash-attn` here produced a flash_attn_2_cuda.so that
+# crashed with `Bus error (core dumped)` on `import flash_attn` -- not a
+# normal ImportError, a SIGBUS, which meant a corrupted/truncated .so (very
+# possibly from an interrupted build -- e.g. Ctrl-C mid-compile). After a
+# clean uninstall + rebuild, the failure mode changed to a normal
+# `ImportError: undefined symbol: _ZN3c104cuda29c10_cuda_check_implementation...`
+# -- i.e. flash-attn had compiled against a DIFFERENT installed torch build
+# than what was present at import time (ABI mismatch on c10's CUDA symbols).
+# Fix used: fully purge (pip uninstall + delete leftover flash_attn* dirs
+# under site-packages + clear ~/.cache/pip) and rebuild from source with
+# --no-cache-dir --no-binary flash-attn, capped at MAX_JOBS=8 to avoid an
+# unbounded parallel compile thrashing/OOMing on this shared box (also a
+# plausible cause of a corrupted .so). Let the build run to full completion
+# -- do NOT Ctrl-C an in-progress flash-attn compile, that is exactly how an
+# earlier attempt produced the SIGBUS in the first place.
+"$PY" -m pip uninstall -y flash-attn 2>/dev/null || true
+find "$VENV" -iname "flash_attn*" -exec rm -rf {} + 2>/dev/null || true
+# UPDATE: classic flash-attn (FA2, package "flash-attn") also failed to
+# compile on this box with a real g++ error building csrc/flash_attn/
+# flash_api.cpp -- root cause not fully isolated (see run history), but
+# strongly suspected to be an ABI mismatch against unpinned torch==2.14.0
+# (too new for FA2's pinned release). This box is GB300 (Blackwell,
+# sm100/sm103), for which Dao-AILab now ships a SEPARATE package, FA4
+# ("flash-attn-4", CuTeDSL-based, built specifically for Hopper/Blackwell)
+# -- more correct for this hardware than FA2 anyway, and less likely to hit
+# the same C++/ABI compile breakage since it's not a classic setup.py
+# CUDA/C++ source build. Its extras use short CUDA major.minor tags
+# (cu12/cu13), NOT the full patch version (cu132 is wrong, use cu13).
+# NOTE: FA4 exposes itself as `flash_attn_interface`, not `flash_attn` --
+# code checking for flash-attn availability (h3_camera_infer.py's
+# --attention-backend, diffusers' attention-backend dispatch) may need to
+# be taught about this if FA4 doesn't register as a drop-in.
+"$PY" -m pip install --pre "flash-attn-4[cu13]"
 
 echo
 echo "[solarwm-h3-setup] probing environment..."
