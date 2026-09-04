@@ -93,7 +93,7 @@ def _compose_c2w(num_latents: int, *, yaw_deg_per_frame: float, forward_step: fl
     return c2w
 
 
-def load_runtime(base_model: str, adapter: str):
+def load_runtime(base_model: str, adapter: str, *, attention_backend: str = "flash"):
     """Load everything needed for generation ONCE: base model + LoRA + codec."""
     import torch
 
@@ -110,7 +110,7 @@ def load_runtime(base_model: str, adapter: str):
         "checkpoint_path": base_model,
         "transformer_subfolder": "transformer",
         "torch_dtype": "bfloat16",
-        "attention_backend": "flash",
+        "attention_backend": attention_backend,
         "low_cpu_mem_usage": True,
         "adapter": {
             "rank": 384, "alpha": 384, "dropout": 0.0,
@@ -234,6 +234,9 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--base-model", required=True, help="SolarWM-h3-33B-base directory")
     ap.add_argument("--adapter", required=True, help="SolarWM-h3-33B-bid-stage0p5-158f directory")
+    ap.add_argument("--attention-backend", default="flash",
+                    help="diffusers attention backend (default 'flash', needs a working flash-attn "
+                         "build; try 'sdpa' or 'native' if flash-attn isn't installed/usable)")
     ap.add_argument("--image", type=Path, help="first frame")
     ap.add_argument("--prompt")
     ap.add_argument("--prompt-file", type=Path)
@@ -257,7 +260,7 @@ def main() -> int:
         if not entries:
             print("[h3-camera-batch] empty manifest, nothing to do")
             return 0
-        runtime = load_runtime(args.base_model, args.adapter)
+        runtime = load_runtime(args.base_model, args.adapter, attention_backend=args.attention_backend)
         for i, e in enumerate(entries):
             print(f"[h3-camera-batch] {i + 1}/{len(entries)}: {e.get('out', 'sample')}", flush=True)
             if e.get("camera_c2w"):
@@ -288,7 +291,7 @@ def main() -> int:
     if not prompt:
         ap.error("pass --prompt or --prompt-file")
 
-    runtime = load_runtime(args.base_model, args.adapter)
+    runtime = load_runtime(args.base_model, args.adapter, attention_backend=args.attention_backend)
     c2w = build_camera_c2w(args.direction, num_latents=47, yaw_deg=args.yaw_deg, forward_step=args.forward_step)
     generate_one(runtime, image_path=args.image, prompt=prompt, c2w=c2w, steps=args.steps, seed=args.seed, out=args.out)
     return 0
