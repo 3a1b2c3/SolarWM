@@ -1,24 +1,31 @@
 #!/usr/bin/env python3
-"""Burn a WASDIJKL key-press overlay onto a generated H3-World video, synced
+"""Burn a WASDIJKL key-press overlay onto a generated video, synced
 frame-for-frame against the action matrix that drove the generation.
 
-Row i of the action matrix maps 1:1 to output video frame i -- no
-resampling needed. This isn't an assumption; it's how the pipeline is
-built: abot_action.py's own docstring says video and action are cut with
-the same explicit frame-index list at slicing time, so they're
-frame-aligned by construction (verified there: zero duplicate frames).
+Ported from H3-World's examples/overlay_keys.py, which imports its key
+layout from H3-World's code/abot/abot_action.py -- that module doesn't
+exist in SolarWM, so the KEY_COLS/ACTIVE_KEY_COLS/ACTION_DIM constants are
+inlined here instead (same values, same column order: abot_action.py's
+KEY_COLS = ["W","A","S","D","Q","E","I","J","K","L","Space"]).
 
-Draws all 8 of abot_action.ACTIVE_KEY_COLS (W, A, S, D, I, J, K, L) as a
-small on-screen keyboard, highlighting whichever are set (> 0) on that
-frame. Works for any --action-file matrix, not just the racer example --
-for a constant --action-preset run, pass a matrix built the same way
-infer.py builds `keys9` (see build_keys9_from_preset() below) instead.
+SolarWM's own h3_infer.py has NO per-frame action-conditioning input at
+all (prompt + first frame only, see h3_infer.py's docstring) -- there is no
+real per-frame action signal to overlay for a SolarWM-generated clip. To
+still use this script (rather than not overlaying anything), pass a
+SYNTHETIC action matrix built by examples/racer/build_direction_actions.py:
+one key (W/A/D) held for every frame, labeling which prompt variant
+(straight/left/right) produced the clip -- a label, not a measured control
+signal. Real per-frame overlays (e.g. for H3-World's action-conditioned
+racer clip) still work exactly as before if such a matrix is provided.
+
+Draws all 8 ACTIVE_KEY_COLS (W, A, S, D, I, J, K, L) as a small on-screen
+keyboard, highlighting whichever are set (> 0) on that frame.
 
 Run:
     python3 examples/overlay_keys.py \\
-        --video outputs/example_racer.mp4 \\
-        --actions examples/racer/actions.npy \\
-        --out outputs/example_racer_overlay.mp4
+        --video outputs/racer/straight.mp4 \\
+        --actions outputs/racer/straight_actions.npy \\
+        --out outputs/racer/straight_overlay.mp4
 """
 from __future__ import annotations
 
@@ -30,9 +37,9 @@ import imageio.v3 as iio
 import numpy as np
 from PIL import Image, ImageDraw
 
-CODE_ABOT = Path(__file__).resolve().parent.parent / "code" / "abot"
-sys.path.insert(0, str(CODE_ABOT))
-import abot_action as A  # noqa: E402
+KEY_COLS = ["W", "A", "S", "D", "Q", "E", "I", "J", "K", "L", "Space"]
+ACTIVE_KEY_COLS = ["W", "A", "S", "D", "I", "J", "K", "L"]
+ACTION_DIM = len(KEY_COLS) + 6  # + 3 rotation + 3 translation columns, per abot_action.py
 
 # 3x3 grid layout: WASD on the left (movement), IJKL on the right (camera) --
 # matches the physical keyboard layout these correspond to.
@@ -69,23 +76,12 @@ def draw_keys_frame(frame: np.ndarray, active_keys: set[str]) -> np.ndarray:
     return np.asarray(composited)
 
 
-def build_keys9_from_preset(preset_keys: tuple[str, ...], num_frames: int) -> np.ndarray:
-    """Matches infer.py's constant-preset keys9 construction, for overlaying
-    a --action-preset run instead of a --action-file one -- same key set
-    held for every frame."""
-    mat = np.zeros((num_frames, A.ACTION_DIM), dtype=np.float32)
-    for key in preset_keys:
-        if key in A.KEY_COLS:
-            mat[:, A.KEY_COLS.index(key)] = 1.0
-    return mat
-
-
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--video", required=True, type=Path)
     ap.add_argument("--actions", required=True, type=Path,
-                     help="[num_frames, 17] action matrix, e.g. examples/racer/actions.npy "
-                          "(same file passed to infer.py's --action-file)")
+                     help="[num_frames, 17] action matrix, e.g. from "
+                          "examples/racer/build_direction_actions.py")
     ap.add_argument("--out", required=True, type=Path)
     args = ap.parse_args()
 
@@ -102,7 +98,7 @@ def main() -> None:
 
     out_frames = []
     for i in range(n):
-        active = {key for key in A.ACTIVE_KEY_COLS if mat[i, A.KEY_COLS.index(key)] > 0}
+        active = {key for key in ACTIVE_KEY_COLS if mat[i, KEY_COLS.index(key)] > 0}
         out_frames.append(draw_keys_frame(frames[i], active))
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
