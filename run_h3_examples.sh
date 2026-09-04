@@ -31,7 +31,7 @@ case "${1:-}" in
   racer|left|right|steer) WHICH="$1"; shift ;;
 esac
 
-STEPS=20
+STEPS=10
 PROMPT="$HERE/examples/racer/prompt.txt"
 PROMPT_LEFT="$HERE/examples/racer/prompt_left.txt"
 PROMPT_RIGHT="$HERE/examples/racer/prompt_right.txt"
