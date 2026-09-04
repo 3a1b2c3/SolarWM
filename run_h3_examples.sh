@@ -25,7 +25,7 @@ cd "$HERE"
 
 WHICH="racer"
 case "${1:-}" in
-  racer|screenshot|left|man|all) WHICH="$1"; shift ;;
+  racer|screenshot|left|right|man|all) WHICH="$1"; shift ;;
 esac
 
 SMALL=(--steps 30 --num-frames 61)
@@ -73,6 +73,20 @@ run_left() {
     "$@"
 }
 
+run_right() {
+  echo "============================================================"
+  echo "Example: right (fl2va i2v -- 640x352, buggy steers right)"
+  echo "============================================================"
+  # Uses Screenshot.png, the image that actually matches the racer prompt.
+  bash "$HERE/run_h3_infer.sh" \
+    --image "$IMG_SHOT" \
+    --prompt-file "$HERE/examples/racer/prompt_right.txt" \
+    --width 640 --height 352 \
+    --name racer_right \
+    "${SMALL[@]}" \
+    "$@"
+}
+
 run_man() {
   echo "============================================================"
   echo "Example: man (t2va -- prompt only, no source image)"
@@ -89,6 +103,7 @@ case "$WHICH" in
   racer)      run_case racer "$IMG_RACER" 832 480 "$@" ;;
   screenshot) run_case screenshot "$IMG_SHOT" 640 352 "$@" ;;
   left)       run_left "$@" ;;
+  right)      run_right "$@" ;;
   man)        run_man "$@" ;;
   all)
     run_case racer "$IMG_RACER" 832 480 "$@"

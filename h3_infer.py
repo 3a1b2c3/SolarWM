@@ -135,6 +135,7 @@ def main() -> int:
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--output-dir", type=Path, default=Path("outputs/h3"))
     parser.add_argument("--name", default="h3_sample")
+    parser.add_argument("--keep-wav", action="store_true", help="keep the intermediate wav alongside the muxed mp4")
     args = parser.parse_args()
 
     if args.prompt_file:
@@ -220,7 +221,13 @@ def main() -> int:
 
     if mux(silent_path, wav_path, final_path):
         silent_path.unlink()
-        print(f"done: {final_path}  (video + audio)")
+        # The wav is only an intermediate -- the muxed mp4 already carries the audio
+        # track. Keep it only when explicitly asked for.
+        if args.keep_wav:
+            print(f"done: {final_path}  (video + audio, wav kept)")
+        else:
+            wav_path.unlink()
+            print(f"done: {final_path}  (video + audio)")
     return 0
 
 
