@@ -1,19 +1,19 @@
 #!/bin/bash
-# Run the bundled MiniMax-H3 examples end to end -- no dataset, no arguments needed.
+# Run the bundled MiniMax-H3 racer examples end to end -- no dataset, no arguments needed.
 #
-# Every case here is i2v (the fl2va workflow: first frame + prompt). Each image is
-# run at its own native resolution, so nothing is rescaled:
+# Every case here is i2v (the fl2va workflow: first frame + prompt), each at the source
+# image's native resolution (832x480 for racer, 640x352 for left/right):
 #
-#   racer       examples/first_frame.png        832x480
-#   screenshot  examples/racer/Screenshot.png   640x352  (RGBA, converted to RGB)
-#   all         both, in sequence
+#   racer       examples/first_frame.png        832x480  straight
+#   left/right  examples/racer/Screenshot.png   640x352  steers toward wall/fence
 #
-# Both share examples/racer/prompt.txt.
+# Share examples/racer/prompt*.txt.
 #
 # Usage:
-#   bash run_h3_examples.sh                    racer
-#   bash run_h3_examples.sh screenshot         the 640x352 case
-#   bash run_h3_examples.sh all                both
+#   bash run_h3_examples.sh                    default: racer + left + right
+#   bash run_h3_examples.sh racer              just the straight racer case
+#   bash run_h3_examples.sh left               just the left case
+#   bash run_h3_examples.sh right              just the right case
 #   bash run_h3_examples.sh racer --steps 50   extra flags pass through to h3_infer.py
 #
 # Defaults are deliberately small (30 steps / 61 frames) so a first run fails fast
@@ -23,38 +23,32 @@ set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$HERE"
 
-WHICH="racer"
+WHICH="steer"
 case "${1:-}" in
-  racer|screenshot|left|right|man|all) WHICH="$1"; shift ;;
+  racer|left|right|steer) WHICH="$1"; shift ;;
 esac
 
 SMALL=(--steps 30 --num-frames 61)
 PROMPT="$HERE/examples/racer/prompt.txt"
 IMG_RACER="$HERE/examples/first_frame.png"
 IMG_SHOT="$HERE/examples/racer/Screenshot.png"
-# The man case has no source image, so it runs t2va (prompt only) rather than fl2va.
-PROMPT_MAN="$HERE/examples/man/prompt.txt"
 
-for path in "$PROMPT" "$IMG_RACER" "$IMG_SHOT" "$PROMPT_MAN"; do
+for path in "$PROMPT" "$IMG_RACER" "$IMG_SHOT"; do
   if [ ! -e "$path" ]; then
     echo "ERROR: example asset missing: $path" >&2
     exit 1
   fi
 done
 
-# $1 name, $2 image, $3 width, $4 height, rest -> passthrough
-run_case() {
-  local name="$1" image="$2" width="$3" height="$4"
-  shift 4
+run_racer() {
   echo "============================================================"
-  echo "Example: $name (fl2va i2v -- ${width}x${height})"
+  echo "Example: racer (fl2va i2v -- 832x480, straight)"
   echo "============================================================"
   bash "$HERE/run_h3_infer.sh" \
-    --image "$image" \
+    --image "$IMG_RACER" \
     --prompt-file "$PROMPT" \
-    --width "$width" \
-    --height "$height" \
-    --name "$name" \
+    --width 832 --height 480 \
+    --name racer \
     "${SMALL[@]}" \
     "$@"
 }
@@ -87,30 +81,16 @@ run_right() {
     "$@"
 }
 
-run_man() {
-  echo "============================================================"
-  echo "Example: man (t2va -- prompt only, no source image)"
-  echo "============================================================"
-  bash "$HERE/run_h3_infer.sh" \
-    --prompt-file "$PROMPT_MAN" \
-    --width 832 --height 480 \
-    --name man \
-    "${SMALL[@]}" \
-    "$@"
-}
-
 case "$WHICH" in
-  racer)      run_case racer "$IMG_RACER" 832 480 "$@" ;;
-  screenshot) run_case screenshot "$IMG_SHOT" 640 352 "$@" ;;
-  left)       run_left "$@" ;;
-  right)      run_right "$@" ;;
-  man)        run_man "$@" ;;
-  all)
-    run_case racer "$IMG_RACER" 832 480 "$@"
+  racer) run_racer "$@" ;;
+  left)  run_left "$@" ;;
+  right) run_right "$@" ;;
+  steer)
+    run_racer "$@"
     echo
-    run_case screenshot "$IMG_SHOT" 640 352 "$@"
+    run_left "$@"
     echo
-    run_man "$@"
+    run_right "$@"
     ;;
 esac
 
