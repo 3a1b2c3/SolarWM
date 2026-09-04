@@ -71,8 +71,3 @@ echo "--adapter / drive_solarwm.py's --adapter-path point at)."
 if [ ! -d "$SOLAR_MODEL_ROOT/SolarWM-h3-33B-bid-stage0p5-158f" ]; then
   echo "WARNING: SolarWM-h3-33B-bid-stage0p5-158f still not found under $SOLAR_MODEL_ROOT after download." >&2
 fi
-echo
-echo "Still needed before running inference: the minimax-h3-158f-768p-nomind-v1"
-echo "latent data under SOLAR_DATA_ROOT -- see docs/latent-wds.md. That data was"
-echo "flagged in SolarWM's own docs as 'upload coming soon' as of this writing;"
-echo "verify it's actually published before expecting run_h3_example.sh to work."
