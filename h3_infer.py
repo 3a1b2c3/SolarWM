@@ -35,6 +35,24 @@ from diffusers import MiniMaxH3ModularPipeline
 
 DEFAULT_MODEL_PATH = "/localhome/kschmid/SolarWM-models/SolarWM-h3-33B-base"
 
+# The H3 video VAE only encodes frame counts of the form 17*n+5, and the modular
+# pipeline additionally requires the rounded value to land in [120, 360] (5-15s @ 24fps).
+H3_FRAME_MIN = 120
+H3_FRAME_MAX = 360
+H3_FRAME_STEP = 17
+H3_FRAME_OFFSET = 5
+
+
+def round_to_h3_frames(num_frames: int) -> int:
+    """Round up to the next 17*n+5 the VAE can encode, clamped into [120, 360]."""
+    n = max(0, -(-(num_frames - H3_FRAME_OFFSET) // H3_FRAME_STEP))
+    rounded = H3_FRAME_STEP * n + H3_FRAME_OFFSET
+    if rounded < H3_FRAME_MIN:
+        rounded = H3_FRAME_STEP * ((H3_FRAME_MIN - H3_FRAME_OFFSET + H3_FRAME_STEP - 1) // H3_FRAME_STEP) + H3_FRAME_OFFSET
+    if rounded > H3_FRAME_MAX:
+        rounded = H3_FRAME_STEP * ((H3_FRAME_MAX - H3_FRAME_OFFSET) // H3_FRAME_STEP) + H3_FRAME_OFFSET
+    return rounded
+
 
 def to_uint8_frames(videos) -> np.ndarray:
     """Normalise whatever the pipeline returns into (F, H, W, 3) uint8."""
@@ -109,7 +127,7 @@ def main() -> int:
     parser.add_argument("--image", type=Path, help="first frame; omit for the t2va workflow")
     parser.add_argument("--last-image", type=Path)
     parser.add_argument("--workflow", choices=("t2va", "fl2va", "ref2va"))
-    parser.add_argument("--num-frames", type=int, default=97)
+    parser.add_argument("--num-frames", type=int, default=158)
     parser.add_argument("--height", type=int, default=480)
     parser.add_argument("--width", type=int, default=832)
     parser.add_argument("--steps", type=int, default=50)
@@ -132,6 +150,15 @@ def main() -> int:
     if not torch.cuda.is_available():
         print("ERROR: no CUDA device visible.", file=sys.stderr)
         return 2
+
+    rounded_frames = round_to_h3_frames(args.num_frames)
+    if rounded_frames != args.num_frames:
+        print(
+            f"NOTE: --num-frames {args.num_frames} isn't encodable by the H3 VAE "
+            f"(needs 17*n+5 in [120,360]); using {rounded_frames} instead.",
+            flush=True,
+        )
+        args.num_frames = rounded_frames
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
 
