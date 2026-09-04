@@ -26,12 +26,12 @@ Target_latents is NOT required: H3Stage0p5Core.generate() never reads it
 (confirmed by reading stage0p5.py -- it's training-loss/comparison-video
 only), so a real full video clip is not needed, just the one image.
 
-CAVEAT, real and unverified: the camera rotation AXIS/SIGN convention
-(does positive yaw here actually correspond to "turn left" on screen?) was
-not verified against a real example -- I know the FORMAT is correct
-(validate_absolute_c2w's orthonormality/determinant/bottom-row checks,
-matching camera.py exactly) but not which sign steers which way. Expect to
-flip --yaw-deg's sign if left/right come out backwards.
+CAVEAT, partially resolved: forward-translation sign was confirmed backwards
+on a real generation (straight case moved in reverse) and is now fixed
+(_compose_c2w uses +forward_step). Rotation AXIS/SIGN convention (does
+positive yaw here actually correspond to "turn left" on screen?) is still
+UNVERIFIED against a real example -- expect to flip --yaw-deg's sign if
+left/right come out backwards too.
 
 LOAD-ONCE: --mind-batch <manifest.json> loads the model/codec ONCE and loops
 every entry (same idea as h3_infer.py's --mind-batch). Each entry needs
@@ -90,7 +90,10 @@ def _compose_c2w(num_latents: int, *, yaw_deg_per_frame: float, forward_step: fl
     )
     delta = np.eye(4, dtype=np.float32)
     delta[:3, :3] = rot
-    delta[:3, 3] = [0.0, 0.0, -forward_step]
+    # Confirmed backwards on a real generation (racer_overlay.mp4, straight
+    # case): -forward_step moved the camera in reverse. Flipped to
+    # +forward_step so straight now advances into the scene.
+    delta[:3, 3] = [0.0, 0.0, forward_step]
 
     c2w = np.zeros((num_latents, 4, 4), dtype=np.float32)
     current = np.eye(4, dtype=np.float32)
