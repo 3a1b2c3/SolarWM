@@ -234,6 +234,10 @@ def generate_one(
 
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_bytes(packaged.artifacts["generated.mp4"])
+    # Save the REAL [47,4,4] c2w that actually drove this generation --
+    # lets a downstream overlay draw the genuine per-frame conditioning
+    # signal instead of a fake/guessed label.
+    np.save(out.with_suffix(".camera_c2w.npy"), np.asarray(c2w, dtype=np.float32))
     print(f"[h3-camera] wrote {out}")
 
 

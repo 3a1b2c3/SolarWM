@@ -75,6 +75,10 @@ run_case() {
     --steps "$STEPS" \
     --out "$HERE/outputs/h3/$name.mp4" \
     "$@"
+  "$PY" "$HERE/examples/overlay_camera_arrow.py" \
+    --video "$HERE/outputs/h3/$name.mp4" \
+    --camera-c2w "$HERE/outputs/h3/$name.camera_c2w.npy" \
+    --out "$HERE/outputs/h3/${name}_overlay.mp4"
 }
 
 case "$WHICH" in
