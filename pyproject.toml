@@ -35,7 +35,7 @@ wan = [
 ]
 h3 = [
   "flash-attn==2.8.3",
-  "imageio==2.37.4",
+  "imageio[pyav]==2.37.4",  # [pyav] needed by examples/overlay_keys.py's iio.imread(..., plugin="pyav")
   "imageio-ffmpeg==0.6.0",
 ]
 ltx = [

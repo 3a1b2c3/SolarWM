@@ -44,7 +44,7 @@ echo "[solarwm-h3-setup] H3-specific deps (diffusers, transformers, peft, imagei
 "$PY" -m pip install \
   diffusers==0.40.0 \
   transformers==5.12.1 peft==0.20.0 \
-  imageio==2.37.4 imageio-ffmpeg==0.6.0
+  "imageio[pyav]==2.37.4" imageio-ffmpeg==0.6.0
 
 echo "[solarwm-h3-setup] installing SolarWM itself (train extras)..."
 "$PY" -m pip install -e ".[train]"

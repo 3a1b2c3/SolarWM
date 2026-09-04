@@ -33,7 +33,7 @@ import argparse
 import sys
 from pathlib import Path
 
-import imageio.v3 as iio
+import imageio.v2 as iio
 import numpy as np
 from PIL import Image, ImageDraw
 
@@ -86,9 +86,10 @@ def main() -> None:
     args = ap.parse_args()
 
     mat = np.load(args.actions)
-    frames = iio.imread(args.video, plugin="pyav")
-    meta = iio.immeta(args.video, plugin="pyav")
-    fps = meta.get("fps", 24)
+    reader = iio.get_reader(str(args.video))
+    fps = reader.get_meta_data().get("fps", 24)
+    frames = [frame for frame in reader]
+    reader.close()
 
     if len(frames) != mat.shape[0]:
         print(f"WARNING: video has {len(frames)} frames but actions matrix has {mat.shape[0]} rows -- "
@@ -102,7 +103,7 @@ def main() -> None:
         out_frames.append(draw_keys_frame(frames[i], active))
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
-    iio.imwrite(args.out, np.stack(out_frames), fps=fps, plugin="pyav", codec="libx264")
+    iio.mimwrite(str(args.out), out_frames, fps=fps, quality=8)
     print(f"Wrote {args.out}: {n} frames @ {fps}fps")
 
 
