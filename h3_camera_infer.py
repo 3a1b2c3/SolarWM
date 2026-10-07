@@ -14,6 +14,24 @@ image. h3_infer.py (the other script here) works around that by driving the
 UNCONDITIONED base diffusers pipeline instead, which has no camera input at
 all (confirmed: a "goes straight" prompt produced a left turn).
 
+SOLARWM'S 3-STAGE TRAINING PIPELINE (per the paper/README) and where this
+script sits in it:
+  - Stage0.5: full-clip BIDIRECTIONAL flow matching -- establishes the base
+    video/text/camera-conditioned representation. SLOW (whole clip denoised
+    together, not causal/streaming). This is what "bid-stage0p5-158f" means
+    and what this script actually drives via H3Stage0p5Core.generate().
+  - Stage1: teacher forcing + AnyFlow loss in one stage -- clean history
+    conditions noisy target chunks, learning both denoising and finite-step
+    flow maps (no separate ODE/consistency-distillation step needed before
+    Stage2).
+  - Stage2: DMD via self-gradient forcing (SGF) -- trains a CAUSAL,
+    autoregressive student (frozen teacher + trainable critic) on its own
+    rollout. This causal/chunked model is what could plausibly back a real
+    low-latency/interactive demo (see the README's "real-time"/"interactive"
+    language) -- NOT what we have. No Stage1/Stage2 H3 checkpoint has been
+    found on junchaoh-cs/SolarWM; download_h3_models.sh has only ever
+    surfaced SolarWM-h3-33B-base and SolarWM-h3-33B-bid-stage0p5-158f.
+
 This script is a third path: it reuses the REAL trained Stage0.5 LoRA
 adapter (SolarWM-h3-33B-bid-stage0p5-158f) and REAL camera-conditioned
 H3Stage0p5Core.generate(), but builds the H3ArtifactBatch by hand from:
@@ -28,10 +46,17 @@ only), so a real full video clip is not needed, just the one image.
 
 CAVEAT, partially resolved: forward-translation sign was confirmed backwards
 on a real generation (straight case moved in reverse) and is now fixed
-(_compose_c2w uses +forward_step). Rotation AXIS/SIGN convention (does
-positive yaw here actually correspond to "turn left" on screen?) is still
-UNVERIFIED against a real example -- expect to flip --yaw-deg's sign if
-left/right come out backwards too.
+(_compose_c2w uses +forward_step). This matches real evidence found in a
+downloaded training sample's manifest.json: camera.convention =
+"authoritative_source_c2w_no_axis_flip" -- these are raw DL3DV/COLMAP c2w
+poses with NO axis remapping, and COLMAP's standard convention looks down
+local +Z (not -Z like OpenGL), which is exactly what the fix now matches.
+
+Rotation AXIS/SIGN convention (does positive yaw here actually correspond
+to "turn left" on screen?) is still UNVERIFIED against a real example --
+COLMAP's Y axis points DOWN (not up), so a positive rotation about Y in
+this frame may read backwards vs the intuitive Y-up sense our rot matrix
+assumes. Expect to flip --yaw-deg's sign if left/right come out backwards.
 
 LOAD-ONCE: --mind-batch <manifest.json> loads the model/codec ONCE and loops
 every entry (same idea as h3_infer.py's --mind-batch). Each entry needs
